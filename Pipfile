@@ -8,6 +8,9 @@ slackclient = "*"
 python-dotenv = "*"
 flask = "*"
 slackeventsapi = "*"
+ratelimit = "*"
+slack-sdk = "*"
+requests = "*"
 
 [dev-packages]
 

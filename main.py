@@ -4,9 +4,15 @@ from pathlib import Path
 from dotenv import load_dotenv
 from flask import Flask, request, Response
 from slackeventsapi import SlackEventAdapter
+from slack_sdk.errors import SlackApiError
 import datetime
 from collections import deque
 from datetime import datetime, timedelta
+import time
+import csv
+import requests
+from io import StringIO
+
 
 env_path = Path('.') / '.env'
 load_dotenv(dotenv_path=env_path)
@@ -16,10 +22,6 @@ slack_event_adapter = SlackEventAdapter(os.environ['SIGNING_SECRET'], "/slack/ev
 
 client = slack.WebClient(token=os.environ['SLACK_TOKEN'])
 BOT_ID = client.api_call("auth.test")["user_id"]
-
-
-import time
-
 
 
 
@@ -114,7 +116,7 @@ def add_member_to_waiting_queue(channel_id, username):
         members_waiting_Q.appendleft(username)
         client.chat_postMessage(channel=channel_id, text=f"{username} has been moved from other tasks to the waiting queue")
     else:
-        members_waiting_Q.appendleft(username)
+        members_waiting_Q.append(username)
         client.chat_postMessage(channel=channel_id, text=f"{username} has been added to the waiting queue")
     client.chat_postMessage(channel=channel_id, text=display_text_list())
 
@@ -141,10 +143,20 @@ def assign_case(username,channel_id):
         lunch_Q.remove(username)
     client.chat_postMessage(channel=channel_id, text=display_text_list())
 
+def exit_from_main_list(username, channel_id):
+    if username in members_waiting_Q:
+        members_waiting_Q.remove(username)
+    elif username in other_tasks_Q:
+        other_tasks_Q.remove(username)
+    elif username in lunch_Q:
+        lunch_Q.remove(username)
+    client.chat_postMessage(channel=channel_id, text=f"Member {username} is out")
+    client.chat_postMessage(channel=channel_id, text=display_text_list())
+
 
 @app.route("/")
 def hello():
-    return "Hello World!"
+    return "Hello World!aa"
 @slack_event_adapter.on("message")
 def message(payload):
     event = payload.get("event", {})
@@ -168,8 +180,10 @@ def message(payload):
             add_member_to_waiting_queue(channel_id, username)
         elif text.lower() == "other":
             add_member_to_other_tasks_queue(channel_id, username)
-        elif text.lower() == "assign":
+        elif text.lower() == "done":
             assign_case(username,channel_id)
+        elif text.lower() == "eos":
+            exit_from_main_list(username, channel_id)
         else:
            pass
 
@@ -184,11 +198,120 @@ def slack_events():
                        "list: List all members waiting for cases\n" \
                        "lunch: Add yourself to the lunch queue\n" \
                        "ready: Add yourself to the waiting queue\n" \
+                       "eos: End of your shift\n" \
+                       "done: Say you have assigned your cases in MagnumPi\n" \
                        "back: Add yourself to the waiting queue\n" \
                        "/help: List all commands\n"
-
     client.chat_postMessage(channel=channel_id, text=list_of_commands)
     return Response(), 200
+
+@app.route('/export', methods=['POST'])
+def export_data_from_channel():
+    # Get the text of the command from the request
+    text = request.form['text']
+
+    # Get the channel ID from the request
+    channel_id = request.form['channel_id']
+
+
+    # Split the text of the command into two date strings
+    start_date_str, end_date_str = text.split()
+    print(start_date_str, end_date_str)
+
+    # Parse the date strings into datetime objects
+    try:
+        start_date = datetime.strptime(start_date_str, '%d-%m-%Y')
+        end_date = datetime.strptime(end_date_str, '%d-%m-%Y') + timedelta(days=1)
+    except ValueError as e:
+        client.chat_postMessage(channel=channel_id, text="Error: " + str(e) + " Please try again")
+        return f"Error: Please enter the dates in the format dd-mm-yyyy"
+
+    print(start_date, end_date)
+
+
+
+    # Call the conversations.history method to retrieve the messages in the specified date range
+    messages = []
+    try:
+        result = client.conversations_history(
+            channel=channel_id,
+            inclusive=True,
+            oldest=str(start_date.timestamp()),
+            latest=str(end_date.timestamp()),
+            timeout=50
+        )
+        messages = result['messages']
+        #print(messages)
+
+    except SlackApiError as e:
+        client.chat_postMessage(channel=channel_id, text="Error: " + str(e) + " Please try again")
+        return f"Error: {e}"
+
+    # # Parse the messages to extract the user and date information
+    data = [['Message', 'User', 'Date']]
+    for message in messages:
+        if 'user' in message:
+            user_id = message['user']
+            user_info = client.users_info(user=user_id)
+            user_name = user_info['user']['real_name']
+        else:
+            user_name = 'Unknown'
+
+        timestamp = float(message['ts'])
+        date = datetime.fromtimestamp(timestamp).strftime('%d-%m-%Y %H:%M:%S')
+        #print(timestamp, date)
+        message_text = message['text']
+        if message_text != '':
+            data.append([message_text, user_name, date])
+
+    # Write the data to a CSV file
+    file_name = f'export_{start_date_str}_{end_date_str}.csv'
+    try:
+        with open(file_name, 'w', newline='') as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerows(data)
+        client.chat_postMessage(channel=channel_id, text="Data exported to " + file_name)
+    except Exception as e:
+        client.chat_postMessage(channel=channel_id, text="Error: " + str(e) + " Please try again")
+        return f"Error: {e}"
+
+    # # Write the data to a CSV file
+    # csv_string = StringIO()
+    # writer = csv.writer(csv_string)
+    # writer.writerows(data)
+
+    # Upload the CSV file to Slack
+    print("here1")
+    files = client.files_list(user=BOT_ID)
+    print(files)
+    upload_and_then_share_file = client.files_upload_v2(
+        channel=channel_id,  # You can specify multiple channels here in the form of a string array
+        title="Test text data",
+        filename="test.txt",
+        content="Hi there! This is a text file!",
+        initial_comment="Here is the file:",
+    )
+    file_id = upload_and_then_share_file['file']['id']
+    print("here")
+
+
+
+
+    # # Construct a download link for the user
+    # download_url = f'https://slack.com/api/files.sharedPublicURL?file_id={file_id}'
+    # headers = {'Authorization': f'Bearer {os.environ["SLACK_TOKEN"]}'}
+    # response = requests.post(download_url, headers=headers)
+    # download_link = response.json()['file']['permalink_public']
+    client.chat_postMessage(channel=channel_id, text=f"Download link: {upload_and_then_share_file}")
+
+
+    return f"Data exported to {file_name}", 200
+
+
+
+@app.route('/')
+def index():
+    return ("Here asdasd")
 
 
 
