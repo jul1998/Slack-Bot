@@ -201,6 +201,7 @@ def slack_events():
                        "eos: End of your shift\n" \
                        "done: Say you have assigned your cases in MagnumPi\n" \
                        "back: Add yourself to the waiting queue\n" \
+                       "other: Add yourself to other tasks queue\n" \
                        "/help: List all commands\n"
     client.chat_postMessage(channel=channel_id, text=list_of_commands)
     return Response(), 200
@@ -293,20 +294,7 @@ def export_data_from_channel():
     )
     file_id = upload_and_then_share_file['file']['id']
     print("here")
-
-
-
-
-    # # Construct a download link for the user
-    # download_url = f'https://slack.com/api/files.sharedPublicURL?file_id={file_id}'
-    # headers = {'Authorization': f'Bearer {os.environ["SLACK_TOKEN"]}'}
-    # response = requests.post(download_url, headers=headers)
-    # download_link = response.json()['file']['permalink_public']
-    client.chat_postMessage(channel=channel_id, text=f"Download link: {upload_and_then_share_file}")
-
-
-    return f"Data exported to {file_name}", 200
-
+    return Response(), 200
 
 
 @app.route('/')
@@ -316,4 +304,5 @@ def index():
 
 
 if __name__ == "__main__":
+    app.run(debug=True)
     app.run(debug=True)
