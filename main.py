@@ -153,6 +153,18 @@ def exit_from_main_list(username, channel_id):
     client.chat_postMessage(channel=channel_id, text=f"Member {username} is out")
     client.chat_postMessage(channel=channel_id, text=display_text_list())
 
+def remove_user_from_queue(user_name, channel_id, user_to_removed):
+    if user_to_removed in members_waiting_Q:
+        members_waiting_Q.remove(user_to_removed)
+    elif user_to_removed in other_tasks_Q:
+        other_tasks_Q.remove(user_to_removed)
+    elif user_to_removed in lunch_Q:
+        lunch_Q.remove(user_to_removed)
+        client.chat_postMessage(channel=channel_id, text=f"{user_to_removed} has been removed from all the queues by {user_name}")
+        client.chat_postMessage(channel=channel_id, text=display_text_list())
+    else:
+        client.chat_postMessage(channel=channel_id, text=f"{user_to_removed} is in no queue any longer")
+
 
 @app.route("/")
 def hello():
@@ -202,6 +214,8 @@ def slack_events():
                        "done: Say you have assigned your cases in MagnumPi\n" \
                        "back: Add yourself to the waiting queue\n" \
                        "other: Add yourself to other tasks queue\n" \
+                       "/remove_user: Remove any user from the all the Qs\n" \
+                       "/export dd-mm-yyyy dd-mm-yyyy: Export messages within date range\n" \
                        "/help: List all commands\n"
     client.chat_postMessage(channel=channel_id, text=list_of_commands)
     return Response(), 200
@@ -294,6 +308,26 @@ def export_data_from_channel():
     )
     file_id = upload_and_then_share_file['file']['id']
     print("here")
+    return Response(), 200
+
+@app.route("/remove_user", methods=['POST'])
+def remove_user_from_Q():
+    data = request.form
+    channel_id = data.get("channel_id")
+    user_id = data.get("user_id")
+    user_to_removed = data['text']
+    #print(user_to_removed)
+    #get if user is admin or not in workspace
+    user_info = client.users_info(user=user_id)
+    #new_user = client.users_info(user=user_to_removed)
+    #print(new_user)
+    user_name = user_info['user']['real_name']
+    if user_info['user']['is_admin'] == True:
+
+        remove_user_from_queue(user_name, channel_id, user_to_removed)
+    else:
+        client.chat_postMessage(channel=channel_id, text=f"{user_name} tried to remove {user_to_removed}, but is not "
+                                                         f"an admin")
     return Response(), 200
 
 
