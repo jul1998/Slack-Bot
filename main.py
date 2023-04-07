@@ -24,7 +24,6 @@ client = slack.WebClient(token=os.environ['SLACK_TOKEN'])
 BOT_ID = client.api_call("auth.test")["user_id"]
 
 
-
 members_waiting_Q = deque([])
 members_with_cases_Q = deque([])
 lunch_Q = deque()
@@ -39,7 +38,6 @@ hours = {
     17: ["Julian", "Julian Andres", "Jonathan", "Tony"],
     18: ["Julian", "Julian Andres", "Jonathan", "Tony"],
     19: ["Julian", "Julian Andres", "Jonathan", "Tony", "arr"], }
-
 
 
 
@@ -86,11 +84,12 @@ def execute_command(command_name, user_id):
         print("Rate limit exceeded")
         return True
     return False
+
 def display_text_list():
-    list_text = f"[Members waiting for cases]\n" + "\n".join([f"{name}" for name in members_waiting_Q])
-    list_text += "\n[Members with cases]\n" + "\n".join([f"{name}" for name in members_with_cases_Q])
-    list_text += "\n[Members in lunch]\n" + "\n".join([f"{name}" for name in lunch_Q])
-    list_text += "\n[Members with other tasks]\n" + "\n".join([f"{name}" for name in other_tasks_Q])
+    list_text = f"************[Members waiting for cases]************ \n" + "\n".join([f"{name}" for name in members_waiting_Q])
+    list_text += "\n ************[Waiting after resolving cases/Members with cases]************ \n" + "\n".join([f"{name}" for name in members_with_cases_Q])
+    list_text += "\n ************[Members in lunch]************ \n" + "\n".join([f"{name}" for name in lunch_Q])
+    list_text += "\n ************[Members with other tasks]************ \n" + "\n".join([f"{name}" for name in other_tasks_Q])
     return list_text
 
 def add_to_lunch_queue(username, channel_id):
@@ -108,7 +107,6 @@ def add_to_lunch_queue(username, channel_id):
     else:
         lunch_Q.append(username)
     client.chat_postMessage(channel=channel_id, text=display_text_list())
-
 
 def add_member_to_waiting_queue(channel_id, username):
     if username in members_waiting_Q:
@@ -150,19 +148,25 @@ def assign_case(username,channel_id):
     if username in members_waiting_Q:
         members_waiting_Q.remove(username)
         members_with_cases_Q.append(username)
+    elif username in members_with_cases_Q:
+        client.chat_postMessage(channel=channel_id, text=f"{username} already has a case")
     elif username in other_tasks_Q:
         other_tasks_Q.remove(username)
+        members_with_cases_Q.append(username)
     elif username in lunch_Q:
         lunch_Q.remove(username)
+        members_with_cases_Q.append(username)
     else:
         members_with_cases_Q.append(username)
     client.chat_postMessage(channel=channel_id, text=display_text_list())
 
-def exit_from_main_list(username, channel_id):
+def exit_from_all_queues(username, channel_id):
     if username in members_waiting_Q:
         members_waiting_Q.remove(username)
     elif username in other_tasks_Q:
         other_tasks_Q.remove(username)
+    elif username in members_with_cases_Q:
+        members_with_cases_Q.remove(username)
     elif username in lunch_Q:
         lunch_Q.remove(username)
     client.chat_postMessage(channel=channel_id, text=f"Member {username} is out")
@@ -216,14 +220,10 @@ def add_multiple_users_to_specific_queue(queue,user_who_moved, channel_id, user_
             assign_case(user_name, channel_id)
     return
 
-
-
-
 @app.route("/")
 def hello():
     return "Hello World!aa"
 
-last_command_time = {}
 
 @slack_event_adapter.on("message")
 def message(payload):
@@ -252,8 +252,6 @@ def message(payload):
             add_to_lunch_queue(username, channel_id)
         elif text.lower() == "ready":
             add_member_to_waiting_queue(channel_id, username)
-        elif text.lower() == "back":
-            add_member_to_waiting_queue(channel_id, username)
         elif text.lower() == "other":
             add_member_to_other_tasks_queue(channel_id, username)
         elif text.lower() == "done":
@@ -261,7 +259,7 @@ def message(payload):
         elif text.lower() == "top":
             add_to_top(username,channel_id)
         elif text.lower() == "eos":
-            exit_from_main_list(username, channel_id)
+            exit_from_all_queues(username, channel_id)
         else:
            pass
 
@@ -279,12 +277,11 @@ def slack_events():
                        "ready: Add yourself to the waiting queue\n" \
                        "eos: End of your shift\n" \
                        "done: Say you have assigned your cases in MagnumPi\n" \
-                       "back: Add yourself to the waiting queue\n" \
                        "other: Add yourself to other tasks queue\n" \
                        "top: Add yourself to the top of the waiting queue\n" \
                         "/remove_user: Remove any user from the all the Qs\n" \
                        "/export dd-mm-yyyy dd-mm-yyyy: Export messages within date range\n" \
-                       "/add_members_to_specific_queue queue name, *user names in slack separated by comma*: Export messages within date range\n" \
+                        "/add_members_to_specific_queue queue name, *user names in slack separated by comma*: Export messages within date range\n" \
                        "/help: List all commands\n"
     client.chat_postMessage(channel=channel_id, text=list_of_commands)
     return Response(), 200
@@ -393,6 +390,7 @@ def add_members_to_specific_queue():
     text = data['text']
     raw_list = text.split(",")
     queue = raw_list.pop(0)
+
     print(raw_list)
     users_to_move = [x.strip() for x in raw_list]
     print(users_to_move)
