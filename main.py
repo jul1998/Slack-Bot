@@ -220,6 +220,14 @@ def add_multiple_users_to_specific_queue(queue,user_who_moved, channel_id, user_
             assign_case(user_name, channel_id)
     return
 
+def reset_list(channel_id):
+    members_waiting_Q.clear()
+    other_tasks_Q.clear()
+    members_with_cases_Q.clear()
+    lunch_Q.clear()
+    client.chat_postMessage(channel=channel_id, text="The list has been reset")
+
+
 @app.route("/")
 def hello():
     return "Hello World!aa"
@@ -260,6 +268,8 @@ def message(payload):
             add_to_top(username,channel_id)
         elif text.lower() == "eos":
             exit_from_all_queues(username, channel_id)
+        elif text.lower() == "reset":
+            reset_list(channel_id)
         else:
            pass
 
@@ -279,6 +289,7 @@ def slack_events():
                        "done: Say you have assigned your cases in MagnumPi\n" \
                        "other: Add yourself to other tasks queue\n" \
                        "top: Add yourself to the top of the waiting queue\n" \
+                        "reset: Reset the list\n" \
                         "/remove_user: Remove any user from the all the Qs\n" \
                        "/export dd-mm-yyyy dd-mm-yyyy: Export messages within date range\n" \
                         "/add_members_to_specific_queue queue name, *user names in slack separated by comma*: Export messages within date range\n" \
