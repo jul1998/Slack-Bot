@@ -231,7 +231,7 @@ def reset_list(channel_id):
 
 def move_users_from_with_case_to_waiting(channel_id):
     while members_with_cases_Q:
-        members_waiting_Q.append(members_with_cases_Q.pop())
+        members_waiting_Q.appendleft(members_with_cases_Q.pop())
     client.chat_postMessage(channel=channel_id, text=display_text_list())
 @app.route("/")
 def hello():
