@@ -28,16 +28,8 @@ members_waiting_Q = deque([])
 members_with_cases_Q = deque([])
 lunch_Q = deque()
 other_tasks_Q = deque()
+hgms_Q = deque()
 
-#create a dictionary that conains hours as keys and list with members as values
-hours = {
-    13: ["Julian", "Julian Andres", "Jonathan", "Tony"],
-    14: ["Roger", "Julian Andres", "Marta", "Tony"],
-    15: ["Julian", "Julian Andres", "Jonathan", "Tony"],
-    16: ["Julian", "Julian Andres", "Allan", "Tony"],
-    17: ["Julian", "Julian Andres", "Jonathan", "Tony"],
-    18: ["Julian", "Julian Andres", "Jonathan", "Tony"],
-    19: ["Julian", "Julian Andres", "Jonathan", "Tony", "arr"], }
 
 
 
@@ -46,27 +38,6 @@ def get_current_hour():
     current_hour = now.hour
     return current_hour
 #
-# def get_members_starting_shift_in_hour(hour):
-#     members = []
-#     if hour == 6:
-#         members = ["Julian", "Jonathan", "Tony", "Ana", "Adri"]
-#     elif hour == 7:
-#         members = ["Julian Andres", "Tony", "Dani", "Peter"]
-#     elif hour == 14:
-#         members = ["Marco", "Allan", "Ale", "Marta"]
-#     # add more hours and corresponding members here
-#     return members
-#
-# def update_shift_lists():
-#     current_hour = get_current_hour()
-#     members_starting_shift = get_members_starting_shift_in_hour(current_hour)
-#     for member in members_starting_shift:
-#         if member in members_waiting_Q:
-#             members_waiting_Q.remove(member)
-#     shift_list_text = f"[Members in the {current_hour}am shift]\n" + "\n".join(
-#         [f"{i}. {name}" for i, name in enumerate(members_starting_shift, start=1)])
-#     client.chat_postMessage(channel="#general", text=shift_list_text)
-
 
 last_command_times = {}
 
@@ -92,6 +63,10 @@ def display_text_list():
     list_text += "\n ************[Members with other tasks]************ \n" + "\n".join([f"{name}" for name in other_tasks_Q])
     return list_text
 
+def display_text_list_HGMS():
+    list_text = f"************[Members in High Risk Cases]************ \n" + "\n".join([f"{name}" for name in hgms_Q])
+    return list_text
+
 def add_to_lunch_queue(username, channel_id):
     if username in members_waiting_Q:
         lunch_Q.append(username)
@@ -104,6 +79,9 @@ def add_to_lunch_queue(username, channel_id):
         lunch_Q.append(username)
     elif username in lunch_Q:
         client.chat_postMessage(channel=channel_id, text=f"{username} is already in the lunch queue")
+    elif username in hgms_Q:
+        hgms_Q.remove(username)
+        lunch_Q.append(username)
     else:
         lunch_Q.append(username)
     client.chat_postMessage(channel=channel_id, text=display_text_list())
@@ -123,6 +101,10 @@ def add_member_to_waiting_queue(channel_id, username):
         members_with_cases_Q.remove(username)
         members_waiting_Q.append(username)
         client.chat_postMessage(channel=channel_id, text=f"{username} has been moved from the cases queue to the waiting queue")
+    elif username in hgms_Q:
+        hgms_Q.remove(username)
+        members_waiting_Q.append(username)
+        client.chat_postMessage(channel=channel_id, text=f"{username} has been moved from the HGMS queue to the waiting queue")
     else:
         members_waiting_Q.append(username)
         client.chat_postMessage(channel=channel_id, text=f"{username} has been added to the waiting queue")
@@ -140,6 +122,9 @@ def add_member_to_other_tasks_queue(channel_id, username):
     elif username in members_with_cases_Q:
         members_with_cases_Q.remove(username)
         other_tasks_Q.appendleft(username)
+    elif username in hgms_Q:
+        hgms_Q.remove(username)
+        other_tasks_Q.appendleft(username)
     else:
         other_tasks_Q.appendleft(username)
     client.chat_postMessage(channel=channel_id, text=display_text_list())
@@ -156,6 +141,9 @@ def assign_case(username,channel_id):
     elif username in lunch_Q:
         lunch_Q.remove(username)
         members_with_cases_Q.append(username)
+    elif username in hgms_Q:
+        hgms_Q.remove(username)
+        members_with_cases_Q.append(username)
     else:
         members_with_cases_Q.append(username)
     client.chat_postMessage(channel=channel_id, text=display_text_list())
@@ -169,6 +157,8 @@ def exit_from_all_queues(username, channel_id):
         members_with_cases_Q.remove(username)
     elif username in lunch_Q:
         lunch_Q.remove(username)
+    elif username in hgms_Q:
+        hgms_Q.remove(username)
     client.chat_postMessage(channel=channel_id, text=f"Member {username} is out")
     client.chat_postMessage(channel=channel_id, text=display_text_list())
 
@@ -179,6 +169,10 @@ def remove_user_from_queue(user_name, channel_id, user_to_removed):
         other_tasks_Q.remove(user_to_removed)
     elif user_to_removed in lunch_Q:
         lunch_Q.remove(user_to_removed)
+    elif user_to_removed in members_with_cases_Q:
+        members_with_cases_Q.remove(user_to_removed)
+    elif user_to_removed in hgms_Q:
+        hgms_Q.remove(user_to_removed)
 
     else:
         client.chat_postMessage(channel=channel_id, text=f"{user_to_removed} is in no queue any longer")
@@ -198,6 +192,14 @@ def add_to_top(username, channel_id):
         other_tasks_Q.remove(username)
         members_waiting_Q.appendleft(username)
         client.chat_postMessage(channel=channel_id, text=f"{username} has been moved from other tasks to the top of the waiting queue")
+    elif username in members_with_cases_Q:
+        members_with_cases_Q.remove(username)
+        members_waiting_Q.appendleft(username)
+        client.chat_postMessage(channel=channel_id, text=f"{username} has been moved from the cases queue to the top of the waiting queue")
+    elif username in hgms_Q:
+        hgms_Q.remove(username)
+        members_waiting_Q.appendleft(username)
+        client.chat_postMessage(channel=channel_id, text=f"{username} has been moved from the HGMS queue to the top of the waiting queue")
     else:
         members_waiting_Q.appendleft(username)
         client.chat_postMessage(channel=channel_id, text=f"{username} has been added to the top of the waiting queue")
@@ -218,14 +220,16 @@ def add_multiple_users_to_specific_queue(queue,user_who_moved, channel_id, user_
             remove_user_from_queue(user_who_moved, channel_id, user_name)
         elif queue == "with_case":
             assign_case(user_name, channel_id)
+        elif queue == "hgms":
+            add_to_hgms(user_name, channel_id)
     return
-
 
 
 def reset_list(channel_id):
     members_waiting_Q.clear()
     other_tasks_Q.clear()
     members_with_cases_Q.clear()
+    hgms_Q.clear()
     lunch_Q.clear()
     client.chat_postMessage(channel=channel_id, text="The list has been reset")
 
@@ -233,9 +237,28 @@ def move_users_from_with_case_to_waiting(channel_id):
     while members_with_cases_Q:
         members_waiting_Q.appendleft(members_with_cases_Q.pop())
     client.chat_postMessage(channel=channel_id, text=display_text_list())
+
+def add_to_hgms(username, channel_id):
+    if username in members_waiting_Q:
+        members_waiting_Q.remove(username)
+        hgms_Q.append(username)
+    elif username in other_tasks_Q:
+        other_tasks_Q.remove(username)
+        hgms_Q.append(username)
+    elif username in lunch_Q:
+        lunch_Q.remove(username)
+        hgms_Q.append(username)
+    elif username in members_with_cases_Q:
+        members_with_cases_Q.remove(username)
+        hgms_Q.append(username)
+    else:
+        hgms_Q.append(username)
+    client.chat_postMessage(channel=channel_id, text=display_text_list_HGMS())
+
+
 @app.route("/")
 def hello():
-    return "Hello World!aa"
+    return "Hello World"
 
 
 @slack_event_adapter.on("message")
@@ -277,6 +300,10 @@ def message(payload):
             reset_list(channel_id)
         elif text.lower() == "move_to_waiting":
             move_users_from_with_case_to_waiting(channel_id)
+        elif text.lower() == "hgms":
+            add_to_hgms(username, channel_id)
+        elif text.lower() == "hgms_list":
+            client.chat_postMessage(channel=channel_id, text=display_text_list_HGMS())
         else:
            pass
 
@@ -292,13 +319,14 @@ def slack_events():
                        "lunch: Add yourself to the lunch queue\n" \
                        "lunch timer: Add yourself to the lunch queue and return to waiting Q after 1 hour\n" \
                        "ready: Add yourself to the waiting queue\n" \
+                       "hgms: Add yourself to the HGMS queue\n"\
                        "eos: End of your shift\n" \
                        "done: Say you have assigned your cases in MagnumPi\n" \
                        "other: Add yourself to other tasks queue\n" \
                        "top: Add yourself to the top of the waiting queue\n" \
-                        "reset: Reset the list\n" \
                        "move_to_waiting: Move all users in 'with_case' Q to 'waiting' one\n" \
-                       "/remove_user: Remove any user from the all the Qs\n" \
+                        "reset: Reset the list\n" \
+                        "/remove_user: Remove any user from the all the Qs\n" \
                        "/export dd-mm-yyyy dd-mm-yyyy: Export messages within date range\n" \
                         "/add_members_to_specific_queue queue name, *user names in slack separated by comma*\n" \
                        "/help: List all commands\n"
